@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluación – Ingreso del alumno</title>
+<link rel="stylesheet" href="estilos.css">
+<script src="config.js"></script>
+<script src="comun.js"></script>
+</head>
+<body>
+
+<!-- Barra de progreso (solo durante el examen) -->
+<div class="barra-prog oculto" id="barra">
+  <div class="in">
+    <span id="barra-nombre"></span>
+    <div class="prog"><i id="barra-i" style="width:0"></i></div>
+    <span id="barra-txt">0/0</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- 1. INGRESO -->
+  <section id="v-login">
+    <div class="card">
+      <span class="tag">Evaluación</span>
+      <h1>Configuración y Adaptación de Sistemas Operativos</h1>
+      <p class="muted">Ingresá con el usuario y la contraseña que te dio tu profesor/a.</p>
+      <form id="f-login" autocomplete="off">
+        <label class="campo">Usuario<input type="text" id="l-usuario" autocapitalize="none" spellcheck="false" required></label>
+        <label class="campo">Contraseña<input type="password" id="l-pass" required></label>
+        <div id="l-error" class="error oculto"></div>
+        <button class="primary" id="l-btn" type="submit">Ingresar</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 2. BIENVENIDA -->
+  <section id="v-inicio" class="oculto">
+    <div class="card">
+      <span class="tag" id="i-curso"></span>
+      <h1 id="i-hola"></h1>
+      <p class="muted" id="i-titulo"></p>
+      <div id="i-estado"></div>
+      <div class="fila" style="margin-top:14px">
+        <button class="primary" id="i-empezar">Empezar el examen</button>
+        <button class="secondary" id="i-salir">Salir</button>
+      </div>
+    </div>
+    <div class="card small muted" id="i-reglas">
+      <b style="color:var(--ink)">Antes de empezar</b>
+      <ul style="margin:6px 0 0;padding-left:20px">
+        <li>Son preguntas de opción múltiple con una sola respuesta correcta.</li>
+        <li>Cada respuesta correcta suma lo mismo. La nota va de 1 a 10 y se aprueba con <b id="i-aprob">6</b>.</li>
+        <li>Tenés que responder todas las preguntas para poder entregar.</li>
+        <li>Si se corta la conexión o recargás la página, tus respuestas marcadas se conservan en este navegador.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. EXAMEN -->
+  <section id="v-examen" class="oculto">
+    <form id="f-examen"></form>
+    <div id="e-msg" class="aviso oculto"></div>
+    <div class="fila" style="margin-top:16px">
+      <button class="primary" id="e-entregar" type="button">Entregar examen</button>
+    </div>
+  </section>
+
+  <!-- 4. RESULTADO -->
+  <section id="v-resultado" class="oculto">
+    <div class="card res" id="r-card"></div>
+    <div id="r-detalle"></div>
+    <div class="fila noprint" style="margin-top:16px">
+      <button class="secondary" id="r-salir">Salir</button>
+    </div>
+  </section>
+</div>
+
+<!-- Confirmación de entrega -->
+<div class="modal oculto" id="modal">
+  <div class="card">
+    <h2>¿Entregar el examen?</h2>
+    <p class="muted">Una vez entregado no vas a poder cambiar tus respuestas.</p>
+    <div class="fila">
+      <button class="primary" id="m-si">Sí, entregar</button>
+      <button class="secondary" id="m-no">Volver a revisar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+if (!configurado()) mostrarAvisoConfig();
+
+let sesion = null;      // {usuario, pass, nombre, ...}
+let preguntas = [];
+let respuestas = {};    // {id: opción}
+
+const vistas = ["v-login", "v-inicio", "v-examen", "v-resultado"];
+function ver(id) {
+  vistas.forEach(v => $("#" + v).classList.toggle("oculto", v !== id));
+  $("#barra").classList.toggle("oculto", id !== "v-examen");
+  window.scrollTo(0, 0);
+}
+function claveLocal() { return "examen-respuestas-" + (sesion ? sesion.usuario : ""); }
+function guardarLocal() { try { localStorage.setItem(claveLocal(), JSON.stringify(respuestas)); } catch (e) {} }
+function leerLocal() { try { return JSON.parse(localStorage.getItem(claveLocal()) || "{}"); } catch (e) { return {}; } }
+function borrarLocal() { try { localStorage.removeItem(claveLocal()); } catch (e) {} }
+
+// ---------- Ingreso ----------
+$("#f-login").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const btn = $("#l-btn"), err = $("#l-error");
+  err.classList.add("oculto");
+  btn.disabled = true; btn.textContent = "Ingresando…";
+  const usuario = $("#l-usuario").value.trim(), pass = $("#l-pass").value;
+  try {
+    const d = await rpc("alumno_ingresar", { p_usuario: usuario, p_pass: pass });
+    sesion = Object.assign({ pass }, d);
+    mostrarInicio();
+  } catch (e) {
+    err.textContent = e.message; err.classList.remove("oculto");
+  } finally {
+    btn.disabled = false; btn.textContent = "Ingresar";
+  }
+});
+
+function mostrarInicio() {
+  const s = sesion;
+  $("#i-hola").textContent = "Hola, " + s.nombre;
+  $("#i-curso").textContent = s.curso || "Alumno/a";
+  $("#i-titulo").textContent = s.titulo;
+  $("#i-aprob").textContent = fmtNota(s.nota_aprobacion);
+  let html = "";
+  if (s.ultimo) {
+    const u = s.ultimo;
+    html += `<div class="${u.aprobado ? "okmsg" : "error"}">Tu última entrega (${fmtFecha(u.fecha)}): <b>${u.correctas}/${u.total}</b> correctas · nota <b>${fmtNota(u.nota)}</b> · ${u.aprobado ? "APROBADO" : "DESAPROBADO"}</div>`;
+  }
+  if (!s.abierto) html += `<div class="aviso">El examen está cerrado en este momento.</div>`;
+  else if (!s.puede_rendir) html += `<div class="aviso">Ya usaste ${s.intentos_usados} de ${s.intentos_max} intento(s). Si necesitás rendir de nuevo, hablá con tu profesor/a.</div>`;
+  else html += `<p class="small muted">Intentos: ${s.intentos_usados} usado(s) de ${s.intentos_max}.</p>`;
+  $("#i-estado").innerHTML = html;
+  $("#i-empezar").classList.toggle("oculto", !s.puede_rendir);
+  $("#i-reglas").classList.toggle("oculto", !s.puede_rendir);
+  ver("v-inicio");
+}
+
+function salir() {
+  sesion = null; preguntas = []; respuestas = {};
+  $("#l-pass").value = "";
+  ver("v-login");
+}
+$("#i-salir").addEventListener("click", salir);
+$("#r-salir").addEventListener("click", salir);
+
+// ---------- Examen ----------
+$("#i-empezar").addEventListener("click", async () => {
+  const btn = $("#i-empezar");
+  btn.disabled = true; btn.textContent = "Cargando preguntas…";
+  try {
+    const d = await rpc("alumno_preguntas", { p_usuario: sesion.usuario, p_pass: sesion.pass });
+    preguntas = d.preguntas;
+    respuestas = {};
+    const previas = leerLocal();
+    preguntas.forEach(p => { if (previas[p.id] !== undefined) respuestas[p.id] = previas[p.id]; });
+    dibujarExamen();
+    ver("v-examen");
+  } catch (e) {
+    $("#i-estado").insertAdjacentHTML("beforeend", `<div class="error">${esc(e.message)}</div>`);
+  } finally {
+    btn.disabled = false; btn.textContent = "Empezar el examen";
+  }
+});
+
+function dibujarExamen() {
+  let html = "", seccion = null;
+  preguntas.forEach((p, i) => {
+    if (p.seccion !== seccion) { seccion = p.seccion; html += `<div class="section">${esc(seccion)}</div>`; }
+    html += `<div class="q" id="q${p.id}"><h3><span>${i + 1}.</span>${esc(p.enunciado)}</h3>`;
+    p.opciones.forEach((op, j) => {
+      const marcado = respuestas[p.id] === j ? "checked" : "";
+      html += `<label class="opt"><input type="radio" name="p${p.id}" value="${j}" ${marcado}><span><b>${LETRAS[j]})</b> ${esc(op)}</span></label>`;
+    });
+    html += `</div>`;
+  });
+  $("#f-examen").innerHTML = html;
+  $("#barra-nombre").textContent = sesion.nombre;
+  actualizarProgreso();
+}
+
+$("#f-examen").addEventListener("change", ev => {
+  const r = ev.target;
+  if (r.type !== "radio") return;
+  const id = Number(r.name.slice(1));
+  respuestas[id] = Number(r.value);
+  $("#q" + id).classList.remove("missing");
+  guardarLocal();
+  actualizarProgreso();
+});
+
+function actualizarProgreso() {
+  const n = preguntas.filter(p => respuestas[p.id] !== undefined).length;
+  $("#barra-txt").textContent = `${n}/${preguntas.length} respondidas`;
+  $("#barra-i").style.width = (preguntas.length ? n * 100 / preguntas.length : 0) + "%";
+}
+
+$("#e-entregar").addEventListener("click", () => {
+  const faltan = preguntas.filter(p => respuestas[p.id] === undefined);
+  const msg = $("#e-msg");
+  if (faltan.length) {
+    faltan.forEach(p => $("#q" + p.id).classList.add("missing"));
+    const nums = faltan.map(p => preguntas.indexOf(p) + 1);
+    msg.textContent = `Te faltan responder ${faltan.length} pregunta(s): ${nums.join(", ")}.`;
+    msg.classList.remove("oculto");
+    $("#q" + faltan[0].id).scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  msg.classList.add("oculto");
+  $("#modal").classList.remove("oculto");
+});
+$("#m-no").addEventListener("click", () => $("#modal").classList.add("oculto"));
+
+$("#m-si").addEventListener("click", async () => {
+  const btn = $("#m-si");
+  btn.disabled = true; btn.textContent = "Entregando…";
+  try {
+    const d = await rpc("alumno_entregar", { p_usuario: sesion.usuario, p_pass: sesion.pass, p_respuestas: respuestas });
+    borrarLocal();
+    $("#modal").classList.add("oculto");
+    mostrarResultado(d);
+  } catch (e) {
+    $("#modal").classList.add("oculto");
+    const msg = $("#e-msg");
+    msg.textContent = e.message + " Tus respuestas siguen guardadas; probá entregar de nuevo.";
+    msg.classList.remove("oculto");
+  } finally {
+    btn.disabled = false; btn.textContent = "Sí, entregar";
+  }
+});
+
+function mostrarResultado(d) {
+  const card = $("#r-card");
+  card.className = "card res " + (d.aprobado ? "pass" : "fail");
+  card.innerHTML = `
+    <div class="grade">
+      <div class="big">${fmtNota(d.nota)}</div>
+      <div>
+        <div class="verdict">${d.aprobado ? "APROBADO" : "DESAPROBADO"}</div>
+        <div>${esc(sesion.nombre)}${sesion.curso ? " · " + esc(sesion.curso) : ""}</div>
+        <div class="small muted">${d.correctas} de ${d.total} correctas · Se aprueba con ${fmtNota(d.nota_aprobacion)}</div>
+      </div>
+    </div>
+    <p class="small muted" style="margin-bottom:0">Tu resultado quedó guardado. Tu profesor/a ya lo puede ver.</p>`;
+  let html = "";
+  if (d.detalle) {
+    let seccion = null;
+    d.detalle.forEach((r, i) => {
+      const p = preguntas.find(x => x.id === r.id);
+      if (!p) return;
+      if (p.seccion !== seccion) { seccion = p.seccion; html += `<div class="section">${esc(seccion)}</div>`; }
+      const bien = r.elegida === r.correcta;
+      html += `<div class="q ${bien ? "ok" : "bad"}"><h3><span>${i + 1}.</span>${esc(p.enunciado)}</h3>`;
+      p.opciones.forEach((op, j) => {
+        const cls = j === r.correcta ? "correct" : (j === r.elegida ? "wrong" : "");
+        html += `<div class="opt ${cls}"><span><b>${LETRAS[j]})</b> ${esc(op)}</span></div>`;
+      });
+      html += `<div class="exp">${bien ? '<b style="color:var(--ok)">✔ Correcta.</b> ' : `<b style="color:var(--bad)">✘ Incorrecta.</b> La correcta es la <b>${LETRAS[r.correcta]})</b>. `}${esc(r.explicacion)}</div></div>`;
+    });
+  }
+  $("#r-detalle").innerHTML = html;
+  ver("v-resultado");
+}
+</script>
+</body>
+</html>

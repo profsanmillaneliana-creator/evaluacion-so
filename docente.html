@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Panel docente – Evaluación</title>
+<link rel="stylesheet" href="estilos.css">
+<script src="config.js"></script>
+<script src="comun.js"></script>
+<style>
+  body.imprimiendo .wrap > *:not(#imprimible){display:none!important}
+  body.imprimiendo #imprimible{display:block!important}
+  #imprimible{display:none}
+  .credenciales{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .credenciales div{border:1px dashed #999;border-radius:8px;padding:10px 12px;font-size:14px;break-inside:avoid}
+</style>
+</head>
+<body>
+<div class="wrap ancho">
+
+  <!-- INGRESO DOCENTE -->
+  <section id="v-login" class="card" style="max-width:440px;margin:40px auto">
+    <span class="tag">Panel docente</span>
+    <h1>Ingreso del profesor/a</h1>
+    <form id="f-login">
+      <label class="campo">Contraseña docente<input type="password" id="l-pass" required></label>
+      <div id="l-error" class="error oculto"></div>
+      <button class="primary" id="l-btn">Ingresar</button>
+    </form>
+  </section>
+
+  <!-- PANEL -->
+  <section id="v-panel" class="oculto">
+    <div class="fila noprint" style="justify-content:space-between;margin-bottom:12px">
+      <div><span class="tag">Panel docente</span><h1 id="p-titulo" style="margin:8px 0 0"></h1></div>
+      <div class="fila">
+        <button class="secondary mini" id="b-actualizar">↻ Actualizar</button>
+        <button class="secondary mini" id="b-salir">Salir</button>
+      </div>
+    </div>
+    <div class="tabs noprint">
+      <button data-tab="t-resultados" class="act">Resultados</button>
+      <button data-tab="t-alumnos">Alumnos</button>
+      <button data-tab="t-config">Configuración</button>
+    </div>
+    <div id="p-msg" class="oculto"></div>
+
+    <!-- RESULTADOS -->
+    <div id="t-resultados" class="tab">
+      <div class="card">
+        <div class="fila" style="justify-content:space-between;margin-bottom:12px">
+          <label class="campo" style="margin:0;min-width:200px">Curso
+            <select id="r-curso"></select></label>
+          <button class="secondary mini" id="b-csv">⬇ Descargar notas (Excel / CSV)</button>
+        </div>
+        <div class="kpis" id="r-kpis"></div>
+        <div class="tabla-wrap"><table id="r-tabla"></table></div>
+      </div>
+      <div class="card">
+        <h2>Aciertos por pregunta</h2>
+        <p class="small muted">Porcentaje de alumnos que respondió bien cada pregunta (última entrega de cada alumno del curso elegido). Sirve para ver qué temas reforzar.</p>
+        <div class="tabla-wrap"><table id="r-preg"></table></div>
+      </div>
+    </div>
+
+    <!-- ALUMNOS -->
+    <div id="t-alumnos" class="tab oculto">
+      <div class="card">
+        <h2>Cargar alumnos</h2>
+        <p class="small muted">Una línea por alumno con este formato (podés pegar directo desde Excel):<br>
+          <code>usuario ; Apellido y nombre ; curso ; contraseña</code><br>
+          La contraseña es opcional: si la dejás vacía se genera una automáticamente. El usuario no lleva espacios (por ejemplo, el DNI o <code>perezjuan</code>).</p>
+        <textarea id="a-lista" placeholder="45123456 ; Pérez, Juan ; 5° A&#10;45987654 ; Gómez, Ana ; 5° A ; ana2026"></textarea>
+        <div class="fila" style="margin-top:10px"><button class="primary" id="b-alta">Cargar alumnos</button></div>
+        <div id="a-resultado"></div>
+      </div>
+      <div class="card">
+        <h2>Alumnos cargados</h2>
+        <div class="tabla-wrap"><table id="a-tabla"></table></div>
+      </div>
+    </div>
+
+    <!-- CONFIGURACIÓN -->
+    <div id="t-config" class="tab oculto">
+      <div class="card">
+        <h2>Examen</h2>
+        <label class="campo">Título<input type="text" id="c-titulo"></label>
+        <label class="fila" style="margin-bottom:10px"><input type="checkbox" id="c-abierto"> <span><b>Examen abierto</b> — los alumnos pueden rendir</span></label>
+        <label class="fila" style="margin-bottom:10px"><input type="checkbox" id="c-mostrar"> <span><b>Mostrar la corrección</b> al alumno al terminar (respuestas correctas y explicación)</span></label>
+        <label class="campo" style="max-width:220px">Intentos por alumno<input type="number" id="c-intentos" min="1" max="20"></label>
+        <button class="primary" id="b-guardar">Guardar cambios</button>
+      </div>
+      <div class="card">
+        <h2>Cambiar contraseña docente</h2>
+        <label class="campo" style="max-width:320px">Nueva contraseña (mínimo 8 caracteres)<input type="password" id="c-nueva"></label>
+        <button class="secondary" id="b-pass">Cambiar contraseña</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="imprimible"></div>
+</div>
+
+<!-- Detalle de respuestas -->
+<div class="modal oculto" id="modal">
+  <div class="card" style="max-width:760px;max-height:88vh;overflow:auto">
+    <div class="fila" style="justify-content:space-between"><h2 id="m-titulo" style="margin:0"></h2><button class="secondary mini" id="m-cerrar">Cerrar</button></div>
+    <div id="m-cuerpo"></div>
+  </div>
+</div>
+
+<script>
+if (!configurado()) mostrarAvisoConfig();
+
+let PASS = null, DATOS = null, cursoSel = "";
+
+// ---------- Utilidades ----------
+function msg(texto, tipo) {
+  const m = $("#p-msg");
+  m.className = tipo || "okmsg"; m.textContent = texto;
+  clearTimeout(msg._t); msg._t = setTimeout(() => m.classList.add("oculto"), 6000);
+}
+async function accion(btn, fn) {
+  const txt = btn.textContent; btn.disabled = true;
+  try { await fn(); } catch (e) { msg(e.message, "error"); } finally { btn.disabled = false; btn.textContent = txt; }
+}
+function ultimo(a) { return a.intentos.length ? a.intentos[a.intentos.length - 1] : null; }
+function descargar(nombre, texto) {
+  const blob = new Blob(["﻿" + texto], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function csv(filas) {
+  return filas.map(f => f.map(v => {
+    v = String(v ?? "");
+    return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }).join(";")).join("\r\n");
+}
+
+// ---------- Ingreso ----------
+$("#f-login").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const btn = $("#l-btn"), err = $("#l-error");
+  err.classList.add("oculto"); btn.disabled = true;
+  try {
+    PASS = $("#l-pass").value;
+    await cargar();
+    $("#v-login").classList.add("oculto");
+    $("#v-panel").classList.remove("oculto");
+  } catch (e) {
+    PASS = null; err.textContent = e.message; err.classList.remove("oculto");
+  } finally { btn.disabled = false; }
+});
+$("#b-salir").addEventListener("click", () => location.reload());
+$("#b-actualizar").addEventListener("click", ev => accion(ev.target, async () => { await cargar(); msg("Datos actualizados."); }));
+
+async function cargar() {
+  DATOS = await rpc("docente_datos", { p_pass: PASS });
+  dibujarTodo();
+}
+
+// ---------- Pestañas ----------
+$$(".tabs button").forEach(b => b.addEventListener("click", () => {
+  $$(".tabs button").forEach(x => x.classList.toggle("act", x === b));
+  $$(".tab").forEach(t => t.classList.toggle("oculto", t.id !== b.dataset.tab));
+}));
+
+function dibujarTodo() {
+  const e = DATOS.examen;
+  $("#p-titulo").textContent = e.titulo;
+  // cursos
+  const cursos = [...new Set(DATOS.alumnos.map(a => a.curso))].sort();
+  if (cursoSel && !cursos.includes(cursoSel)) cursoSel = "";
+  $("#r-curso").innerHTML = `<option value="">Todos los cursos</option>` +
+    cursos.map(c => `<option ${c === cursoSel ? "selected" : ""}>${esc(c)}</option>`).join("");
+  dibujarResultados(); dibujarAlumnos();
+  // config
+  $("#c-titulo").value = e.titulo;
+  $("#c-abierto").checked = e.abierto;
+  $("#c-mostrar").checked = e.mostrar_correccion;
+  $("#c-intentos").value = e.intentos_max;
+}
+
+// ---------- Resultados ----------
+$("#r-curso").addEventListener("change", ev => { cursoSel = ev.target.value; dibujarResultados(); });
+
+function alumnosFiltrados() { return DATOS.alumnos.filter(a => !cursoSel || a.curso === cursoSel); }
+
+function dibujarResultados() {
+  const lista = alumnosFiltrados();
+  const rindieron = lista.filter(a => ultimo(a));
+  const aprob = rindieron.filter(a => ultimo(a).aprobado);
+  const prom = rindieron.length ? rindieron.reduce((s, a) => s + Number(ultimo(a).nota), 0) / rindieron.length : 0;
+  $("#r-kpis").innerHTML = `
+    <div><b>${lista.length}</b>alumnos</div>
+    <div><b>${rindieron.length}</b>rindieron</div>
+    <div><b>${aprob.length}</b>aprobados${rindieron.length ? ` (${Math.round(aprob.length * 100 / rindieron.length)}%)` : ""}</div>
+    <div><b>${rindieron.length ? fmtNota(prom.toFixed(2)) : "–"}</b>promedio</div>`;
+
+  let h = `<tr><th>Alumno/a</th><th>Usuario</th><th>Curso</th><th class="num">Correctas</th><th class="num">Nota</th><th class="num">Estado</th><th>Entregó</th><th class="num">Intentos</th><th></th></tr>`;
+  if (!lista.length) h += `<tr><td colspan="9" class="muted">Todavía no hay alumnos cargados. Cargalos en la pestaña «Alumnos».</td></tr>`;
+  lista.forEach(a => {
+    const u = ultimo(a);
+    h += `<tr><td>${esc(a.nombre)}</td><td class="muted">${esc(a.usuario)}</td><td>${esc(a.curso)}</td>
+      <td class="num">${u ? u.correctas + "/" + u.total : "–"}</td>
+      <td class="num"><b>${u ? fmtNota(u.nota) : "–"}</b></td>
+      <td class="num">${u ? (u.aprobado ? '<span class="pill ap">Aprobado</span>' : '<span class="pill de">Desaprobado</span>') : '<span class="pill pe">Pendiente</span>'}</td>
+      <td class="small">${u ? fmtFecha(u.fecha) : ""}</td>
+      <td class="num">${a.intentos.length}</td>
+      <td><div class="fila" style="gap:6px;flex-wrap:nowrap">${u ? `<button class="secondary mini" data-ver="${esc(a.usuario)}">Ver respuestas</button>
+        <button class="secondary mini" data-hab="${esc(a.usuario)}" title="Borra sus entregas para que pueda rendir de nuevo">Habilitar de nuevo</button>` : ""}</div></td></tr>`;
+  });
+  $("#r-tabla").innerHTML = h;
+
+  // aciertos por pregunta
+  let hp = `<tr><th class="num">N°</th><th>Pregunta</th><th>Tema</th><th class="num">Aciertos</th><th></th></tr>`;
+  DATOS.preguntas.forEach((p, i) => {
+    const n = rindieron.length;
+    const ok = rindieron.filter(a => ultimo(a).respuestas[p.id] === p.correcta).length;
+    const pct = n ? Math.round(ok * 100 / n) : 0;
+    hp += `<tr><td class="num">${i + 1}</td><td>${esc(p.enunciado)}</td><td class="small muted">${esc(p.seccion)}</td>
+      <td class="num">${n ? pct + "%" : "–"}</td><td><div class="hbar"><i style="width:${pct}%;${pct < 60 ? "background:var(--bad)" : ""}"></i></div></td></tr>`;
+  });
+  $("#r-preg").innerHTML = hp;
+}
+
+$("#r-tabla").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.ver) verRespuestas(b.dataset.ver);
+  if (b.dataset.hab) {
+    if (!confirm(`¿Borrar las entregas de «${b.dataset.hab}» para que pueda volver a rendir? Se pierde su nota actual.`)) return;
+    accion(b, async () => {
+      await rpc("docente_habilitar_intento", { p_pass: PASS, p_usuario: b.dataset.hab });
+      await cargar(); msg("Listo: el alumno puede volver a rendir.");
+    });
+  }
+});
+
+function verRespuestas(usuario) {
+  const a = DATOS.alumnos.find(x => x.usuario === usuario), u = ultimo(a);
+  $("#m-titulo").textContent = `${a.nombre} — nota ${fmtNota(u.nota)} (${u.correctas}/${u.total})`;
+  let h = `<p class="small muted">Entregado el ${fmtFecha(u.fecha)}${a.intentos.length > 1 ? ` · se muestra la última de ${a.intentos.length} entregas` : ""}.</p>`;
+  DATOS.preguntas.forEach((p, i) => {
+    const el = u.respuestas[p.id], bien = el === p.correcta;
+    h += `<div class="q ${bien ? "ok" : "bad"}" style="padding:12px 14px"><h3 style="font-size:15px"><span>${i + 1}.</span>${esc(p.enunciado)}</h3>`;
+    p.opciones.forEach((op, j) => {
+      const cls = j === p.correcta ? "correct" : (j === el ? "wrong" : "");
+      if (cls) h += `<div class="opt ${cls}" style="font-size:14px"><span><b>${LETRAS[j]})</b> ${esc(op)} ${j === el ? "← eligió" : ""}</span></div>`;
+    });
+    if (el === undefined) h += `<div class="small muted">Sin responder</div>`;
+    h += `</div>`;
+  });
+  $("#m-cuerpo").innerHTML = h;
+  $("#modal").classList.remove("oculto");
+}
+$("#m-cerrar").addEventListener("click", () => $("#modal").classList.add("oculto"));
+$("#modal").addEventListener("click", ev => { if (ev.target.id === "modal") $("#modal").classList.add("oculto"); });
+
+$("#b-csv").addEventListener("click", () => {
+  const filas = [["Apellido y nombre", "Usuario", "Curso", "Correctas", "Total", "Nota", "Estado", "Fecha", "Intentos"]];
+  alumnosFiltrados().forEach(a => {
+    const u = ultimo(a);
+    filas.push([a.nombre, a.usuario, a.curso, u ? u.correctas : "", u ? u.total : "", u ? fmtNota(u.nota) : "",
+      u ? (u.aprobado ? "Aprobado" : "Desaprobado") : "Pendiente", u ? fmtFecha(u.fecha) : "", a.intentos.length]);
+  });
+  descargar(`notas${cursoSel ? "-" + cursoSel.replace(/\W+/g, "") : ""}.csv`, csv(filas));
+});
+
+// ---------- Alumnos ----------
+function dibujarAlumnos() {
+  let h = `<tr><th>Alumno/a</th><th>Usuario</th><th>Curso</th><th class="num">Entregas</th><th></th></tr>`;
+  if (!DATOS.alumnos.length) h += `<tr><td colspan="5" class="muted">Sin alumnos.</td></tr>`;
+  DATOS.alumnos.forEach(a => {
+    h += `<tr><td>${esc(a.nombre)} ${a.bloqueado ? '<span class="pill de">bloqueado</span>' : ""}</td><td>${esc(a.usuario)}</td><td>${esc(a.curso)}</td>
+      <td class="num">${a.intentos.length}</td>
+      <td><div class="fila" style="gap:6px;flex-wrap:nowrap"><button class="secondary mini" data-np="${esc(a.usuario)}">Nueva contraseña</button>
+      <button class="danger mini" data-del="${esc(a.usuario)}">Eliminar</button></div></td></tr>`;
+  });
+  $("#a-tabla").innerHTML = h;
+}
+
+$("#a-tabla").addEventListener("click", ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.np) accion(b, async () => {
+    const d = await rpc("docente_nueva_pass", { p_pass: PASS, p_usuario: b.dataset.np });
+    await cargar();
+    msg(`Nueva contraseña de ${d.usuario}: ${d.pass}  (anotala, no se vuelve a mostrar)`);
+  });
+  if (b.dataset.del) {
+    if (!confirm(`¿Eliminar a «${b.dataset.del}» y todas sus entregas? No se puede deshacer.`)) return;
+    accion(b, async () => {
+      await rpc("docente_borrar_alumno", { p_pass: PASS, p_usuario: b.dataset.del });
+      await cargar(); msg("Alumno eliminado.");
+    });
+  }
+});
+
+$("#b-alta").addEventListener("click", ev => accion(ev.target, async () => {
+  const lista = $("#a-lista").value.split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(l => {
+    const c = l.split(/\t|;/).map(x => x.trim());
+    return { usuario: c[0] || "", nombre: c[1] || "", curso: c[2] || "", pass: c[3] || "" };
+  });
+  if (!lista.length) throw new Error("Escribí al menos un alumno.");
+  const d = await rpc("docente_alta_alumnos", { p_pass: PASS, p_lista: lista });
+  await cargar();
+  let h = "";
+  if (d.creados.length) {
+    h += `<div class="okmsg">Se cargaron ${d.creados.length} alumno(s). <b>Guardá o imprimí las contraseñas ahora</b>: por seguridad no se vuelven a mostrar.</div>
+      <div class="fila" style="margin-bottom:8px"><button class="secondary mini" id="b-cred-csv">⬇ Descargar credenciales</button><button class="secondary mini" id="b-cred-imp">🖨 Imprimir tarjetas</button></div>
+      <div class="tabla-wrap"><table><tr><th>Alumno/a</th><th>Curso</th><th>Usuario</th><th>Contraseña</th></tr>` +
+      d.creados.map(c => `<tr><td>${esc(c.nombre)}</td><td>${esc(c.curso)}</td><td><code>${esc(c.usuario)}</code></td><td><code>${esc(c.pass)}</code></td></tr>`).join("") +
+      `</table></div>`;
+  }
+  if (d.omitidos.length) h += `<div class="aviso">No se cargaron: ${d.omitidos.map(o => esc(o.usuario || "(línea vacía)") + " – " + esc(o.motivo)).join(" · ")}</div>`;
+  $("#a-resultado").innerHTML = h;
+  if (d.creados.length) {
+    $("#a-lista").value = "";
+    $("#b-cred-csv").onclick = () => descargar("credenciales.csv",
+      csv([["Apellido y nombre", "Curso", "Usuario", "Contraseña"], ...d.creados.map(c => [c.nombre, c.curso, c.usuario, c.pass])]));
+    $("#b-cred-imp").onclick = () => {
+      const url = location.href.replace(/docente\.html.*$/, "");
+      $("#imprimible").innerHTML = `<div class="credenciales">` + d.creados.map(c =>
+        `<div><b>${esc(c.nombre)}</b> · ${esc(c.curso)}<br>Página: ${esc(url)}<br>Usuario: <b>${esc(c.usuario)}</b><br>Contraseña: <b>${esc(c.pass)}</b></div>`).join("") + `</div>`;
+      document.body.classList.add("imprimiendo");
+      window.print();
+      document.body.classList.remove("imprimiendo");
+    };
+  }
+}));
+
+// ---------- Configuración ----------
+$("#b-guardar").addEventListener("click", ev => accion(ev.target, async () => {
+  await rpc("docente_configurar", {
+    p_pass: PASS, p_abierto: $("#c-abierto").checked, p_mostrar_correccion: $("#c-mostrar").checked,
+    p_intentos_max: Number($("#c-intentos").value), p_titulo: $("#c-titulo").value
+  });
+  await cargar(); msg("Configuración guardada.");
+}));
+$("#b-pass").addEventListener("click", ev => accion(ev.target, async () => {
+  const nueva = $("#c-nueva").value;
+  await rpc("docente_cambiar_pass", { p_pass: PASS, p_nueva: nueva });
+  PASS = nueva; $("#c-nueva").value = "";
+  msg("Contraseña docente cambiada.");
+}));
+</script>
+</body>
+</html>
