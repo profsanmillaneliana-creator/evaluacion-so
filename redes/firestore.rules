@@ -1,0 +1,128 @@
+rules_version = '2';
+
+// =====================================================================
+//  REGLAS DE SEGURIDAD · Cuestionario "Conexión entre dos computadoras"
+//  E.E.T. N° 3117 "Mtro. Daniel Oscar Reyes"
+// ---------------------------------------------------------------------
+//  ANTES DE PUBLICAR: reemplazá PEGAR_AQUI_TU_UID por el UID de tu
+//  usuario docente (Firebase → Authentication → Users → columna "User UID").
+// =====================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Quién es quién ----------
+    function esDocente() {
+      return request.auth != null && request.auth.uid in ['PEGAR_AQUI_TU_UID'];
+    }
+    function esAlumno() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/alumnos/$(request.auth.uid));
+    }
+    function examen() {
+      return get(/databases/$(database)/documents/config/examen).data;
+    }
+
+    // Cuenta cuántas respuestas (r) coinciden con la clave (k). Hasta 30 preguntas.
+    function aciertos(r, k) {
+      return (r.size() > 0 && k.size() > 0 && r[0] == k[0] ? 1 : 0)
+        + (r.size() > 1 && k.size() > 1 && r[1] == k[1] ? 1 : 0)
+        + (r.size() > 2 && k.size() > 2 && r[2] == k[2] ? 1 : 0)
+        + (r.size() > 3 && k.size() > 3 && r[3] == k[3] ? 1 : 0)
+        + (r.size() > 4 && k.size() > 4 && r[4] == k[4] ? 1 : 0)
+        + (r.size() > 5 && k.size() > 5 && r[5] == k[5] ? 1 : 0)
+        + (r.size() > 6 && k.size() > 6 && r[6] == k[6] ? 1 : 0)
+        + (r.size() > 7 && k.size() > 7 && r[7] == k[7] ? 1 : 0)
+        + (r.size() > 8 && k.size() > 8 && r[8] == k[8] ? 1 : 0)
+        + (r.size() > 9 && k.size() > 9 && r[9] == k[9] ? 1 : 0)
+        + (r.size() > 10 && k.size() > 10 && r[10] == k[10] ? 1 : 0)
+        + (r.size() > 11 && k.size() > 11 && r[11] == k[11] ? 1 : 0)
+        + (r.size() > 12 && k.size() > 12 && r[12] == k[12] ? 1 : 0)
+        + (r.size() > 13 && k.size() > 13 && r[13] == k[13] ? 1 : 0)
+        + (r.size() > 14 && k.size() > 14 && r[14] == k[14] ? 1 : 0)
+        + (r.size() > 15 && k.size() > 15 && r[15] == k[15] ? 1 : 0)
+        + (r.size() > 16 && k.size() > 16 && r[16] == k[16] ? 1 : 0)
+        + (r.size() > 17 && k.size() > 17 && r[17] == k[17] ? 1 : 0)
+        + (r.size() > 18 && k.size() > 18 && r[18] == k[18] ? 1 : 0)
+        + (r.size() > 19 && k.size() > 19 && r[19] == k[19] ? 1 : 0)
+        + (r.size() > 20 && k.size() > 20 && r[20] == k[20] ? 1 : 0)
+        + (r.size() > 21 && k.size() > 21 && r[21] == k[21] ? 1 : 0)
+        + (r.size() > 22 && k.size() > 22 && r[22] == k[22] ? 1 : 0)
+        + (r.size() > 23 && k.size() > 23 && r[23] == k[23] ? 1 : 0)
+        + (r.size() > 24 && k.size() > 24 && r[24] == k[24] ? 1 : 0)
+        + (r.size() > 25 && k.size() > 25 && r[25] == k[25] ? 1 : 0)
+        + (r.size() > 26 && k.size() > 26 && r[26] == k[26] ? 1 : 0)
+        + (r.size() > 27 && k.size() > 27 && r[27] == k[27] ? 1 : 0)
+        + (r.size() > 28 && k.size() > 28 && r[28] == k[28] ? 1 : 0)
+        + (r.size() > 29 && k.size() > 29 && r[29] == k[29] ? 1 : 0);
+    }
+
+    // ---------- Configuración del examen (abierto, título, etc.) ----------
+    match /config/examen {
+      allow read: if esDocente() || esAlumno();
+      allow write: if esDocente();
+    }
+
+    // ---------- Preguntas SIN respuestas ----------
+    // Se ven con el examen abierto, o después de entregar si la corrección está habilitada.
+    match /config/preguntas {
+      allow read: if esDocente()
+        || (esAlumno()
+            && (examen().abierto == true
+                || (examen().mostrar_correccion == true
+                    && exists(/databases/$(database)/documents/entregas/$(request.auth.uid)))));
+      allow write: if esDocente();
+    }
+
+    // ---------- Clave de respuestas ----------
+    // El alumno solo la puede leer si YA entregó y el docente habilitó la corrección.
+    match /config/clave {
+      allow read: if esDocente()
+        || (esAlumno()
+            && examen().mostrar_correccion == true
+            && exists(/databases/$(database)/documents/entregas/$(request.auth.uid)));
+      allow write: if esDocente();
+    }
+
+    // ---------- Alumnos (los crea el docente) ----------
+    match /alumnos/{uid} {
+      allow read: if esDocente() || (request.auth != null && request.auth.uid == uid);
+      allow write: if esDocente();
+    }
+
+    // ---------- Entregas: una por alumno ----------
+    match /entregas/{uid} {
+      allow read: if esDocente() || (request.auth != null && request.auth.uid == uid);
+
+      // 1) El alumno entrega sus respuestas (una sola vez y con el examen abierto)
+      allow create: if esAlumno()
+        && request.auth.uid == uid
+        && examen().abierto == true
+        && request.resource.data.keys().hasOnly(['respuestas', 'fecha', 'usuario', 'nombre', 'curso'])
+        && request.resource.data.respuestas is list
+        && request.resource.data.respuestas.size()
+             == get(/databases/$(database)/documents/config/preguntas).data.lista.size()
+        && request.resource.data.fecha == request.time
+        && request.resource.data.usuario
+             == get(/databases/$(database)/documents/alumnos/$(uid)).data.usuario;
+
+      // 2) Se registra la cantidad de aciertos: la base de datos la verifica
+      //    comparando con la clave, así que no se puede inventar.
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && !('correctas' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['correctas'])
+        && request.resource.data.correctas
+             == aciertos(resource.data.respuestas,
+                         get(/databases/$(database)/documents/config/clave).data.correctas);
+
+      // Borrar una entrega (para que el alumno vuelva a rendir): solo el docente
+      allow delete: if esDocente();
+    }
+
+    // Todo lo demás está prohibido
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}
