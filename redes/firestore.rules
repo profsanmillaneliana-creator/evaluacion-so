@@ -4,7 +4,7 @@ rules_version = '2';
 //  REGLAS DE SEGURIDAD · Cuestionario "Conexión entre dos computadoras"
 //  E.E.T. N° 3117 "Mtro. Daniel Oscar Reyes"
 // ---------------------------------------------------------------------
-//  ANTES DE PUBLICAR: reemplazá PEGAR_AQUI_TU_UID por el UID de tu
+//  ANTES DE PUBLICAR: reemplazá qyAxg6pt7RSSWa9RE6Th7XMMSv52 por el UID de tu
 //  usuario docente (Firebase → Authentication → Users → columna "User UID").
 // =====================================================================
 
@@ -13,7 +13,7 @@ service cloud.firestore {
 
     // ---------- Quién es quién ----------
     function esDocente() {
-      return request.auth != null && request.auth.uid in ['PEGAR_AQUI_TU_UID'];
+      return request.auth != null && request.auth.uid in ['qyAxg6pt7RSSWa9RE6Th7XMMSv52'];
     }
     function esAlumno() {
       return request.auth != null

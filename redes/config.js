@@ -6,12 +6,12 @@ window.CONFIG = {
   // (Firebase → Configuración del proyecto ⚙ → General → Tus apps → app web).
   // Estos datos son públicos por diseño: la seguridad la dan las reglas de Firestore.
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyD7WUfg_Sjbu_m3s0dZn-8VI-zTY_ccPHE",
+    authDomain: "redes-eet3117.firebaseapp.com",
+    projectId: "redes-eet3117",
+    storageBucket: "redes-eet3117.firebasestorage.app",
+    messagingSenderId: "137857507345",
+    appId: "1:137857507345:web:015b9ad074ae2eaa4151b0"
   },
 
   // Dominio ficticio con el que se arma el "correo" interno de cada alumno
