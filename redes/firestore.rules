@@ -4,8 +4,7 @@ rules_version = '2';
 //  REGLAS DE SEGURIDAD · Cuestionario "Conexión entre dos computadoras"
 //  E.E.T. N° 3117 "Mtro. Daniel Oscar Reyes"
 // ---------------------------------------------------------------------
-//  ANTES DE PUBLICAR: reemplazá qyAxg6pt7RSSWa9RE6Th7XMMSv52 por el UID de tu
-//  usuario docente (Firebase → Authentication → Users → columna "User UID").
+//  El UID de la cuenta docente está en la función esDocente().
 // =====================================================================
 
 service cloud.firestore {
