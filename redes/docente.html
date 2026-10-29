@@ -50,7 +50,7 @@
       <div class="card">
         <div class="fila" style="justify-content:space-between;margin-bottom:12px">
           <label class="campo" style="margin:0;min-width:200px">Curso<select id="r-curso"></select></label>
-          <button class="secondary mini" id="b-csv">⬇ Descargar notas (Excel / CSV)</button>
+          <div class="fila" style="gap:8px"><button class="secondary mini" id="b-pdf-todos" title="Un PDF con la evaluación corregida de cada alumno que entregó (una o más páginas por alumno)">📄 PDF corregido de todos</button><button class="secondary mini" id="b-csv">⬇ Descargar notas (Excel / CSV)</button></div>
         </div>
         <div class="kpis" id="r-kpis"></div>
         <div class="tabla-wrap"><table id="r-tabla"></table></div>
@@ -199,6 +199,7 @@ function dibujarResultados() {
       <td class="num">${n ? (n.aprobado ? '<span class="pill ap">Aprobado</span>' : '<span class="pill de">Desaprobado</span>') : '<span class="pill pe">Pendiente</span>'}</td>
       <td class="small">${n ? fmtFecha(n.fecha) : ""}</td>
       <td><div class="fila" style="gap:6px;flex-wrap:nowrap">${n ? `<button class="secondary mini" data-ver="${a.uid}">Ver respuestas</button>
+        <button class="secondary mini" data-pdf="${a.uid}" title="Descargar la evaluación corregida en PDF">📄 PDF</button>
         <button class="secondary mini" data-hab="${a.uid}" title="Borra su entrega para que pueda rendir de nuevo">Habilitar de nuevo</button>` : ""}</div></td></tr>`;
   });
   $("#r-tabla").innerHTML = h;
@@ -216,6 +217,7 @@ function dibujarResultados() {
 $("#r-tabla").addEventListener("click", ev => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.ver) verRespuestas(b.dataset.ver);
+  if (b.dataset.pdf) accion(b, () => pdfDe([b.dataset.pdf]));
   if (b.dataset.hab) {
     const a = DATOS.alumnos.find(x => x.uid === b.dataset.hab);
     if (!confirm(`¿Borrar la entrega de ${a.nombre} para que pueda volver a rendir? Se pierde su nota actual.`)) return;
@@ -240,6 +242,23 @@ function verRespuestas(uid) {
 }
 $("#m-cerrar").addEventListener("click", () => $("#modal").classList.add("oculto"));
 $("#modal").addEventListener("click", ev => { if (ev.target.id === "modal") $("#modal").classList.add("oculto"); });
+
+// ---------- PDF de la evaluación corregida ----------
+async function pdfDe(uids) {
+  const lista = uids.map(uid => ({ alumno: DATOS.alumnos.find(a => a.uid === uid), entrega: DATOS.entregas[uid] }))
+                    .filter(x => x.alumno && x.entrega);
+  if (!lista.length) throw new Error("No hay entregas para descargar.");
+  const { descargarPDF } = await import("./pdf.js");
+  const limpio = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const nombre = lista.length === 1
+    ? `evaluacion-redes-${limpio(lista[0].alumno.nombre)}.pdf`
+    : `evaluaciones-redes${cursoSel ? "-" + limpio(cursoSel) : ""}.pdf`;
+  descargarPDF(lista, { preguntas: DATOS.preguntas, clave: DATOS.clave, config: C,
+                        titulo: (DATOS.examen && DATOS.examen.titulo) || C.TITULO }, nombre);
+  msg(lista.length === 1 ? "PDF descargado." : `PDF descargado con ${lista.length} evaluaciones.`);
+}
+$("#b-pdf-todos").addEventListener("click", ev => accion(ev.target, () =>
+  pdfDe(filtrados().filter(a => DATOS.entregas[a.uid]).map(a => a.uid))));
 
 $("#b-csv").addEventListener("click", () => {
   const filas = [["Apellido y nombre", "Usuario", "Curso", "Correctas", "Total", "Nota", "Estado", "Fecha de entrega"]];

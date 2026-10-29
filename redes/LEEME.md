@@ -17,6 +17,7 @@ E.E.T. N° 3117 «Mtro. Daniel Oscar Reyes»
   - Abrís y cerrás el examen.
   - Ves notas, promedios y el porcentaje de aciertos por pregunta.
   - Descargás las notas a Excel y habilitás a un alumno para que rinda de nuevo.
+  - Descargás en **PDF** la evaluación resuelta y corregida de cada alumno (botón 📄 PDF), o la de todos juntos para imprimir.
 - **Seguridad:**
   - Las respuestas correctas **no están en la página** ni en GitHub. Están en la base de datos y se cargan desde el archivo `preguntas-redes.json`, que guardás vos.
   - La nota la verifica la base de datos comparando con la clave, así que nadie puede inventarse un 10.
@@ -103,5 +104,6 @@ El plan Spark de Firebase alcanza de sobra para un curso. A diferencia de Supaba
 | `config.js` | Datos de tu proyecto Firebase (**completar**) |
 | `datos.js`, `util.js`, `estilos.css` | Funcionamiento y diseño |
 | `firebase.js` | Librería oficial de Firebase (v13.1.0), incluida para no depender de servidores externos |
+| `pdf.js`, `jspdf.js` | Generación del PDF corregido (jsPDF, licencia MIT) |
 | `firestore.rules` | Reglas de seguridad para pegar en Firebase (Paso 4) |
 | `preguntas-redes.json` | Preguntas **con las respuestas**. **No lo subas a GitHub** |
